@@ -55,7 +55,7 @@ def get_min_distance(df, category):
 
 min_dist_syk = get_min_distance(exp_buildings_gdf, "sårbar")
 min_dist_bolig = get_min_distance(exp_buildings_gdf, "bolig")
-min_dist_industri = get_min_distance(exp_buildings_gdf, "industri")
+min_dist_industri = get_min_distance(exp_buildings_gdf, "vei/industri")
 
 # --- 5. DETERMINE VIOLATIONS (Inside Zone) ---
 # Filter based on Category AND specific QD limit
@@ -70,7 +70,7 @@ df_bolig_inside = exp_buildings_gdf[
 ]
 
 df_industri_inside = exp_buildings_gdf[
-    (exp_buildings_gdf["kategori"] == "industri") & 
+    (exp_buildings_gdf["kategori"] == "vei/industri") & 
     (exp_buildings_gdf["avstand_meter"] < QD_vei)
 ]
 
@@ -150,7 +150,7 @@ def get_status(row):
         return "⚠️ Innenfor QD"
     elif cat == "bolig" and dist < QD_bolig:
         return "⚠️ Innenfor QD"
-    elif cat == "industri" and dist < QD_vei:
+    elif cat == "vei/industri" and dist < QD_vei:
         return "⚠️ Innenfor QD"
     elif cat == "ingen beskyttelse":
         return None

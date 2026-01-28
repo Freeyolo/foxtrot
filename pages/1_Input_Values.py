@@ -143,7 +143,7 @@ with st.form("my_form"):
         # Reset success flag temporarily
         st.session_state["GISanalysis_complete"] = False
         
-        with st.spinner("Henter eksponerte objekter fra matrikkelen…", show_time=True):
+        with st.spinner("Henter eksponerte objekter fra matrikkelen...", show_time=True):
             missing = []
             if nordUTM33 is None: missing.append("Nord / Y")
             if oestUTM33 is None: missing.append("Øst / X")
@@ -221,40 +221,41 @@ if st.session_state["GISanalysis_complete"]:
     inputs = st.session_state["last_calc_inputs"]
     if inputs:
         st.info(f"**Valgte verdier:** Nord: {inputs['nord']}, Øst: {inputs['oest']}, Totalvekt: {inputs['nei']} kg")
-
-    # --- RE-GENERATE MAP FROM SAVED DATA ---
-    gdf_anlegg = st.session_state["gdf_anlegg"]
-    gdf_syk = st.session_state["gdf_syk"]
-    gdf_bolig = st.session_state["gdf_bolig"]
-    gdf_vei = st.session_state["gdf_vei"]
-    exp_buildings = st.session_state["exp_buildings_gdf"]
-
-    # Build Map
-    m = gdf_anlegg.explore(
-        marker_type=folium.Marker(icon=folium.Icon(color='blue', icon='bomb', prefix='fa')),
-        name='anlegg',
-        control=False
-    )
+        
+    with st.spinner("Tegner kart...", show_time=True):
+        # --- RE-GENERATE MAP FROM SAVED DATA ---
+        gdf_anlegg = st.session_state["gdf_anlegg"]
+        gdf_syk = st.session_state["gdf_syk"]
+        gdf_bolig = st.session_state["gdf_bolig"]
+        gdf_vei = st.session_state["gdf_vei"]
+        exp_buildings = st.session_state["exp_buildings_gdf"]
     
-    gdf_syk.explore(m=m, style_kwds=dict(fill=False, color='red'), name='QDsyk', control=False)
-    gdf_bolig.explore(m=m, style_kwds=dict(fill=False, color='orange'), name='QDbolig', control=False)
-    gdf_vei.explore(m=m, style_kwds=dict(fill=False, color='black'), name='QDvei', control=False)
+        # Build Map
+        m = gdf_anlegg.explore(
+            marker_type=folium.Marker(icon=folium.Icon(color='blue', icon='bomb', prefix='fa')),
+            name='anlegg',
+            control=False
+        )
+        
+        gdf_syk.explore(m=m, style_kwds=dict(fill=False, color='red'), name='QDsyk', control=False)
+        gdf_bolig.explore(m=m, style_kwds=dict(fill=False, color='orange'), name='QDbolig', control=False)
+        gdf_vei.explore(m=m, style_kwds=dict(fill=False, color='black'), name='QDvei', control=False)
+        
+        m = plot_matrikkel_on_map(exp_buildings, m)
+        folium.LayerControl().add_to(m)
     
-    m = plot_matrikkel_on_map(exp_buildings, m)
-    folium.LayerControl().add_to(m)
-
-    # Render Map
-    st_folium(
-        m, 
-        width="stretch", 
-        zoom=13, 
-        key="map_1",
-        returned_objects=[] # Prevents flicker loop
-    )
-    
-    st.page_link(
-        "pages/2_QD_analysis.py", 
-        label="Analyser lokasjon", 
-        icon=":material/calculate:", 
-        width="stretch"
-    )
+        # Render Map
+        st_folium(
+            m, 
+            width="stretch", 
+            zoom=13, 
+            key="map_1",
+            returned_objects=[] # Prevents flicker loop
+        )
+        
+        st.page_link(
+            "pages/2_QD_analysis.py", 
+            label="Analyser lokasjon", 
+            icon=":material/calculate:", 
+            width="stretch"
+        )
