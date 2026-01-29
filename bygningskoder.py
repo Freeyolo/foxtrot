@@ -6,8 +6,10 @@ Dato for versjon: 26.01.26
 @author: KRHE
 """
 
-# Format: "Code": ("Description", "Category")
-# Categories: "sårbar", "bolig", "vei/industri", "ingen beskyttelse", "skjermingsverdig"
+# Format: "Bygningskode": ("Beskrivelse", "Kategori")
+# Kategorier: "sårbar", "bolig", "vei/industri", "ingen beskyttelse", "skjermingsverdig"
+# https://www.ssb.no/klass/klassifikasjoner/31
+# https://register.geonorge.no/sosi-kodelister/fkb/bygning/5.0/bygningstype
 
 MATRIKKEL_BYGNINGSTYPE = {
     "111": ("Enebolig",  "bolig"),

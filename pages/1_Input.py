@@ -14,7 +14,6 @@ from streamlit_folium import st_folium
 from get_matrikkel_data import get_matrikkel_data
 
 # --- IMPORT DICTIONARY ---
-# Ensure bygningskoder.py is in the same folder as this script
 try:
     from bygningskoder import MATRIKKEL_BYGNINGSTYPE
 except ImportError:
@@ -22,8 +21,7 @@ except ImportError:
     MATRIKKEL_BYGNINGSTYPE = {} # Fallback to prevent crash
 
 
-# --- 1. SAFE INITIALIZATION ---
-# Initialize flags and data containers
+# --- 1. INITIALIZATION OF SESSION STATE ---
 keys_to_init = [
     "exp_buildings_gdf", "gdf_anlegg", 
     "gdf_syk", "gdf_bolig", "gdf_vei", 
@@ -53,7 +51,7 @@ def QD_func(NEI):
 def classify_buildings(gdf):
     """
     Classifies buildings using the MATRIKKEL_BYGNINGSTYPE dictionary.
-    Assigns colors: Purple (skjermingsverdig), Lightgrey (ingen beskyttelse), etc.
+    Assigns colors: Purple (skjermingsverdig), Red (sårbar), etc.
     """
     # 1. Ensure the building code column is a string
     gdf["bygningstype"] = gdf["bygningstype"].astype(str)
@@ -80,7 +78,7 @@ def classify_buildings(gdf):
         if pd.notna(row["Kategori"]):
             return row["Kategori"]
         
-        # Fallback if code is new/unknown: Guess based on first digit
+        # Fallback if code is new/unknown: Guess type based on first digit
         code = str(row["bygningstype"])
         first_digit = code[0]
         
@@ -91,7 +89,6 @@ def classify_buildings(gdf):
     gdf["kategori"] = gdf.apply(assign_category, axis=1)
 
     # 5. Assign Colors
-    # Note: 'lightgray' is the CSS color name (American spelling)
     color_map = {
         "sårbar": "red",
         "bolig": "orange",
@@ -177,6 +174,7 @@ with st.form("my_form"):
             bbox_tuple = (row["minx"], row["miny"], row["maxx"], row["maxy"])
             
             exp_buildings_gdf = get_matrikkel_data(bbox_tuple) 
+            
             # --- HANDLE NO RESULTS ---            
             if exp_buildings_gdf.empty:
                 st.warning('Ingen bygninger eksponert :sunglasses:')
@@ -209,6 +207,7 @@ with st.form("my_form"):
             st.session_state["exp_buildings_gdf"] = exp_buildings_gdf
             
             # 6. Flag Analysis as Complete
+            st.session_state["gdf_calculated"] = None
             st.session_state["GISanalysis_complete"] = True
 
 # --- 4. RENDER OUTPUT ---
@@ -250,11 +249,11 @@ if st.session_state["GISanalysis_complete"]:
             width="stretch", 
             zoom=13, 
             key="map_1",
-            returned_objects=[] # Prevents flicker loop
+            returned_objects=[]
         )
         
         st.page_link(
-            "pages/2_QD_analysis.py", 
+            "pages/2_QD_analyse.py", 
             label="Analyser lokasjon", 
             icon=":material/calculate:", 
             width="stretch"

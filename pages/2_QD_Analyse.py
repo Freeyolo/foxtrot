@@ -2,22 +2,18 @@ import streamlit as st
 import geopandas as gpd
 import pandas as pd
 import numpy as np
-
-# --- IMPORT YOUR BLAST MODEL ---
 from blast_model import incident_pressure
 
 # --- 1. SETUP & STATE CHECK ---
-st.set_page_config(page_title="Analyse av bygninger", page_icon=":material/analytics:")
+st.set_page_config(page_title="Analyse av objekter", page_icon=":material/analytics:")
 
 if "GISanalysis_complete" not in st.session_state or not st.session_state["GISanalysis_complete"]:
     st.warning("Ingen data funnet. Vennligst gå tilbake til hovedsiden og kjør analysen først.")
-    # Adjust 'Home.py' to whatever your main filename is (e.g. 'streamlit_app.py')
     st.page_link("streamlit_app.py", label="Gå til hovedside", icon=":material/home:") 
     st.stop()
 
-# --- 2. RETRIEVE DATA FROM SESSION STATE ---
+# --- 2. RETRIEVE INPUTS ---
 gdf_anlegg = st.session_state["gdf_anlegg"]
-exp_buildings_gdf = st.session_state["exp_buildings_gdf"].copy()
 inputs = st.session_state["last_calc_inputs"]
 NEI = inputs["nei"]
 
@@ -29,24 +25,36 @@ def QD_func(NEI):
     QD_vei = max(round(14.8 * NEI ** (1/3)), 180)
     return QD_syk, QD_bolig, QD_vei
 
-# --- 4. CALCULATIONS ---
-# A. Recalculate Regulatory QD limits
 QD_syk, QD_bolig, QD_vei = QD_func(NEI)
 
-# B. Calculate Distance (Geometry)
-anlegg_point = gdf_anlegg.geometry.iloc[0]
-exp_buildings_gdf["avstand_meter"] = exp_buildings_gdf.geometry.distance(anlegg_point)
+# --- 4. CALCULATIONS (PERFORM ONCE & PERSIST) ---
+# We check if 'gdf_calculated' exists. If not, we perform the heavy math and save it.
+if "gdf_calculated" not in st.session_state or st.session_state["gdf_calculated"] is None:
+    
+    # Load RAW data from Page 1
+    df_calc = st.session_state["exp_buildings_gdf"].copy()
+    
+    # A. Calculate Distance (Geometry)
+    anlegg_point = gdf_anlegg.geometry.iloc[0]
+    df_calc["avstand_meter"] = df_calc.geometry.distance(anlegg_point)
+    
+    # B. Calculate Blast Overpressure (Physics Model)
+    # This is the "expensive" operation we want to do only once
+    df_calc["trykk_kPa"] = df_calc["avstand_meter"].apply(lambda d: incident_pressure(d, NEI))
+    
+    # C. Sort by distance
+    df_calc = df_calc.sort_values(by="avstand_meter")
+    
+    # SAVE to Session State
+    st.session_state["gdf_calculated"] = df_calc
 
-# C. Calculate Blast Overpressure (Physics Model)
-exp_buildings_gdf["trykk_kPa"] = exp_buildings_gdf["avstand_meter"].apply(
-    lambda d: incident_pressure(d, NEI)
-)
+# --- 5. LOAD CALCULATED DATA ---
+# Now we simply refer to the stored, calculated DataFrame
+exp_buildings_gdf = st.session_state["gdf_calculated"]
 
-# Sort by distance (closest first)
-exp_buildings_gdf = exp_buildings_gdf.sort_values(by="avstand_meter")
+# --- 6. DETERMINE VIOLATIONS & METRICS ---
 
-# D. Find CLOSEST object in each category (regardless of violation)
-# We use a helper function to safely get the min distance or return None
+# Helper to find closest object
 def get_min_distance(df, category):
     subset = df[df["kategori"] == category]
     if subset.empty:
@@ -57,8 +65,7 @@ min_dist_syk = get_min_distance(exp_buildings_gdf, "sårbar")
 min_dist_bolig = get_min_distance(exp_buildings_gdf, "bolig")
 min_dist_industri = get_min_distance(exp_buildings_gdf, "vei/industri")
 
-# --- 5. DETERMINE VIOLATIONS (Inside Zone) ---
-# Filter based on Category AND specific QD limit
+# Filter Violations
 df_syk_inside = exp_buildings_gdf[
     (exp_buildings_gdf["kategori"] == "sårbar") & 
     (exp_buildings_gdf["avstand_meter"] < QD_syk)
@@ -74,9 +81,14 @@ df_industri_inside = exp_buildings_gdf[
     (exp_buildings_gdf["avstand_meter"] < QD_vei)
 ]
 
+df_skjerming_inside = exp_buildings_gdf[
+    (exp_buildings_gdf["kategori"] == "skjermingsverdig") & 
+    (exp_buildings_gdf["avstand_meter"] < QD_syk)
+]
+
 total_violation_count = len(df_syk_inside) + len(df_bolig_inside) + len(df_industri_inside)
 
-# --- 6. RENDER PAGE ---
+# --- 7. RENDER PAGE ---
 st.title("Detaljert Analyse")
 st.write(f"Analyse basert på et netto eksplosivinnhold (NEI) på **{NEI} kg**.")
 
@@ -84,11 +96,9 @@ st.divider()
 
 # --- A. SUMMARY METRICS ---
 st.subheader("Oppsummering av eksponerte objekt")
-                                                                                         
 
 col1, col2, col3 = st.columns(3)
 
-# Helper to format distance for display
 def fmt_dist(val):
     return f"{val:.1f} m" if val is not None else "Ingen funnet"
 
@@ -125,6 +135,15 @@ with col3:
     st.caption(f"📏 **Krav (QD):** {QD_vei} m")
     st.caption(f"🏭 **Nærmeste:** {fmt_dist(min_dist_industri)}")
 
+st.divider()
+
+# --- WARNINGS ---
+if not df_skjerming_inside.empty:
+    st.warning(
+        f"⚠️ **OBS:** Det er identifisert **{len(df_skjerming_inside)}** skjermingsverdige objekter "
+        f"innenfor sikkerhetsavstanden for sårbare objekter ({QD_syk} m). "
+        "Disse bør vurderes særskilt."
+    )
 
 if total_violation_count == 0:
     st.success("Ingen bygninger innenfor sin respektive sikkerhetsavstand! :shield:")
@@ -137,8 +156,7 @@ st.divider()
 st.subheader("Tabell over alle bygninger")
 
 # Prepare display DataFrame
-# We now include the calculated 'trykk_kPa' column
-display_df = exp_buildings_gdf[["bygningstype", "kategori", "avstand_meter", "trykk_kPa"]].copy()
+display_df = exp_buildings_gdf[["Beskrivelse", "kategori", "avstand_meter", "trykk_kPa"]].copy()
 
 # Add Status Column
 def get_status(row):
@@ -147,11 +165,11 @@ def get_status(row):
     
     # Check violations
     if cat == "sårbar" and dist < QD_syk:
-        return "⚠️ Innenfor QD"
+        return "⚠️ Innenfor QD  (sårbar)"
     elif cat == "bolig" and dist < QD_bolig:
-        return "⚠️ Innenfor QD"
+        return "⚠️ Innenfor QD (bolig)"
     elif cat == "vei/industri" and dist < QD_vei:
-        return "⚠️ Innenfor QD"
+        return "⚠️ Innenfor QD (vei/ind.)"
     elif cat == "ingen beskyttelse":
         return None
     else:
@@ -160,7 +178,7 @@ def get_status(row):
 display_df["Status"] = display_df.apply(get_status, axis=1)
 
 # Rename columns
-display_df.columns = ["Bygningstype", "Kategori", "Avstand (m)", "Trykk (kPa)", "Status"]
+display_df.columns = ["Beskrivelse", "Kategori", "Avstand (m)", "Trykk (kPa)", "Status"]
 
 # Display Table with Formatting
 st.dataframe(
@@ -174,7 +192,14 @@ st.dataframe(
     }
 )
 
-# Download CSV
+# Navigation and Download
+st.page_link(
+    "pages/3_QRA_seleksjon.py", 
+    label="Velg objekter for QRA", 
+    icon=":material/calculate:", 
+    use_container_width=True
+)
+
 csv = display_df.to_csv(index=False).encode('utf-8')
 st.download_button(
     label="Last ned tabell som CSV",
