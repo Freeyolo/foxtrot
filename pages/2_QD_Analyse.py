@@ -195,9 +195,9 @@ st.dataframe(
 # Navigation and Download
 st.page_link(
     "pages/3_QRA_seleksjon.py", 
-    label="Velg objekter for QRA", 
+    label="Gå til side for seleksjon av objekter til QRA", 
     icon=":material/calculate:", 
-    use_container_width=True
+    width="stretch",
 )
 
 csv = display_df.to_csv(index=False).encode('utf-8')

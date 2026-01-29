@@ -13,7 +13,7 @@ Dato for versjon: 26.01.26
 
 MATRIKKEL_BYGNINGSTYPE = {
     "111": ("Enebolig",  "bolig"),
-    "112": ("Enebolig m/hybel/sokkelleil.",  "bolig"),
+    "112": ("Enebolig m/hybel",  "bolig"),
     "113": ("Våningshus",  "bolig"),
     "121": ("Tomannsbolig",  "bolig"),
     "122": ("Tomannsbolig, horisontaldelt",  "bolig"),
@@ -37,8 +37,8 @@ MATRIKKEL_BYGNINGSTYPE = {
     "163": ("Våninghus som benyttes som fritidsbolig",  "bolig"),
     "171": ("Seterhus, sel, rorbu og lignende",  "vei/industri"),
     "172": ("Skogs- og utmarkskoie, gamme",  "vei/industri"),
-    "181": ("Garasje, uthus, anneks til bolig",  "ingen beskyttelse"),
-    "182": ("Garasje, uthus, anneks til fritidbolig",  "ingen beskyttelse"),
+    "181": ("Garasje, uthus, anneks",  "ingen beskyttelse"),
+    "182": ("Garasje, uthus, anneks",  "ingen beskyttelse"),
     "183": ("Naust, båthus, sjøbu",  "ingen beskyttelse"),
     "193": ("Boligbrakker",  "bolig"),
     "199": ("Annen boligbygning",  "bolig"),

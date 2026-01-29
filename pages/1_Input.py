@@ -254,7 +254,7 @@ if st.session_state["GISanalysis_complete"]:
         
         st.page_link(
             "pages/2_QD_analyse.py", 
-            label="Analyser lokasjon", 
+            label="Gå til side for analyse av utsatte objekter og QD", 
             icon=":material/calculate:", 
             width="stretch"
         )
