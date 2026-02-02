@@ -94,7 +94,7 @@ def classify_buildings(gdf):
         "bolig": "orange",
         "vei/industri": "black",
         "skjermingsverdig": "purple",
-        "ingen beskyttelse": "#79DAD6"
+        "ingen beskyttelse": "#6c757d"
     }
     
     # Map the color, defaulting to 'black' if category is somehow unknown
@@ -118,18 +118,37 @@ def plot_matrikkel_on_map(gdf, m):
         subset = gdf[gdf["kategori"] == cat]
         color = subset["color"].iloc[0]
         subset = subset.drop(columns=["color", "kategori", "typekode"], errors="ignore")
+        
         subset.explore(
             m=m,
             name=f"Bygg – {cat}",
-            marker_type="circle",
-            style_kwds=dict(color=color, fillColor=color, fillOpacity=1, radius=5),
+            marker_type="circle_marker", # This creates a CircleMarker (radius in pixels)
+            # 1. Put radius in marker_kwds
+            marker_kwds=dict(radius=5), 
+            # 2. Keep colors and fill in style_kwds
+            style_kwds=dict(color=color, fillColor=color, fillOpacity=1),
         )
     return m
 
-# --- 3. INPUT FORM ---
-with st.form("my_form"):
-    st.write("Input")
+# ------------------------------------------------------------
+# 1. PAGE SETUP
+# ------------------------------------------------------------
+st.set_page_config(
+    page_title="Input",
+    page_icon=":material/checklist:",
+    layout="wide"
+)
 
+
+# ------------------------------------------------------------
+# 8. UI RENDER
+# ------------------------------------------------------------
+st.title("Input")
+st.write("Skriv in lokasjon for eksplosivlager og totalvekt av eksplovsier, NEI (**N**etto **E**ksplosiv **I**nnhold)")
+
+
+# --- 3. INPUT FORM ---
+with st.form("Input_form"):
     nordUTM33 = st.number_input('Nord / Y', value=None, placeholder='UTM33N EPSG:32633')
     oestUTM33 = st.number_input('Øst / X', value=None, placeholder='UTM33N EPSG:32633')
     NEI = st.number_input('Totalvekt', step=1, min_value=1, max_value=100000)

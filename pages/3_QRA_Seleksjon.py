@@ -12,8 +12,7 @@ from blast_model import incident_pressure
 # ------------------------------------------------------------
 st.set_page_config(
     page_title="Seleksjon for QRA",
-    page_icon=":material/checklist:",
-    layout="wide"
+    page_icon=":material/checklist:"
 )
 
 # ------------------------------------------------------------
@@ -127,19 +126,18 @@ map_gdf["Inkluder"] = df_current["Inkluder"]
 # ------------------------------------------------------------
 # 7. MAP VIEW STATE
 # ------------------------------------------------------------
+# We only calculate the center of the ANLEGG once. 
+# We do NOT update this based on clicks anymore.
 if "map_center" not in st.session_state:
     anlegg = st.session_state["gdf_anlegg"].geometry.iloc[0]
     transformer = Transformer.from_crs("EPSG:32633", "EPSG:4326", always_xy=True)
     lon, lat = transformer.transform(anlegg.x, anlegg.y)
     st.session_state["map_center"] = [lat, lon]
 
-# Safety: Ensure center is list [lat, lon], not dict
+# Safety check
 if isinstance(st.session_state["map_center"], dict):
     c = st.session_state["map_center"]
     st.session_state["map_center"] = [c.get('lat'), c.get('lng')]
-
-if "map_zoom" not in st.session_state:
-    st.session_state["map_zoom"] = 14
 
 if "last_processed_click" not in st.session_state:
     st.session_state["last_processed_click"] = None
@@ -157,110 +155,137 @@ st.info(
 col_map, col_table = st.columns(2)
 
 # --- MAP SECTION ---
-with col_map:
-    st.subheader("Kart")
 
-    # 1. Base Map
-    m = folium.Map(
-        location=st.session_state["map_center"], 
-        zoom_start=st.session_state["map_zoom"], 
-        tiles="OpenStreetMap"
-    )
+st.subheader("Kart")
 
-    anlegg_ll = st.session_state["gdf_anlegg"].to_crs(epsg=4326).geometry.iloc[0]
-    folium.Marker(
-        [anlegg_ll.y, anlegg_ll.x],
-        icon=folium.Icon(color="blue", icon="bomb", prefix="fa"),
-        tooltip="Anlegg",
-    ).add_to(m)
+# 1. Base Map (Centered on Anlegg)
+m = folium.Map(
+    location=st.session_state["map_center"], 
+    zoom_start=14, # Fallback zoom
+    tiles="OpenStreetMap"
+)
 
-    # 2. Dynamic Feature Group
-    fg = folium.FeatureGroup(name="Objekter")
+# 2. CALCULATE BOUNDS FOR GDF_SYK (Largest Radius)
+# This ensures the map always zooms to fit the safety circle
+try:
+    gdf_syk = st.session_state["gdf_syk"]
+    min_x, min_y, max_x, max_y = gdf_syk.total_bounds
+    
+    # Transform bounds from UTM33 to Lat/Lon
+    transformer = Transformer.from_crs("EPSG:32633", "EPSG:4326", always_xy=True)
+    sw_lon, sw_lat = transformer.transform(min_x, min_y)
+    ne_lon, ne_lat = transformer.transform(max_x, max_y)
+    
+    # Apply fit_bounds to the map
+    m.fit_bounds([[sw_lat, sw_lon], [ne_lat, ne_lon]])
+except Exception as e:
+    # Fallback if calculation fails (e.g. empty geometry)
+    pass
 
-    for idx, row in map_gdf.iterrows():
-        included = row["Inkluder"]
-        folium.CircleMarker(
-            [row.geometry.y, row.geometry.x],
-            radius=8 if included else 6,
-            color="white",
-            weight=1,
-            fill=True,
-            fill_color="#28a745" if included else "#6c757d",
-            fill_opacity=0.9 if included else 0.5,
-            tooltip=row["Beskrivelse"],
-        ).add_to(fg)
+# 3. Add Anlegg Marker
+anlegg_ll = st.session_state["gdf_anlegg"].to_crs(epsg=4326).geometry.iloc[0]
+folium.Marker(
+    [anlegg_ll.y, anlegg_ll.x],
+    icon=folium.Icon(color="blue", icon="bomb", prefix="fa"),
+    tooltip="Anlegg",
+).add_to(m)
 
-    # 3. Render
-    map_output = st_folium(
-        m,
-        center=st.session_state["map_center"],
-        zoom=st.session_state["map_zoom"],
-        feature_group_to_add=fg,
-        # CRITICAL CHANGE: Removed "center" and "zoom" to stop pan-lag
-        returned_objects=["last_object_clicked"], 
-        height=600,
-        width=700,
-        key="selector_map",
-    )
+# 4. ADD QD rings 
+gdf_bolig = st.session_state["gdf_bolig"]
+gdf_vei = st.session_state["gdf_vei"]
 
-    # 4. Handle Click (Toggle Selection)
-    if map_output.get("last_object_clicked"):
-        lat = map_output["last_object_clicked"]["lat"]
-        lng = map_output["last_object_clicked"]["lng"]
-        click_id = f"{lat:.6f}_{lng:.6f}"
+gdf_syk.explore(m=m, style_kwds=dict(fill=False, color='red'), name='QDsyk', control=False)
+gdf_bolig.explore(m=m, style_kwds=dict(fill=False, color='orange'), name='QDbolig', control=False)
+gdf_vei.explore(m=m, style_kwds=dict(fill=False, color='black'), name='QDvei', control=False)
+folium.LayerControl().add_to(m)
 
-        if click_id != st.session_state["last_processed_click"]:
+# 5. Dynamic Feature Group (Selectable Objects)
+fg = folium.FeatureGroup(name="Objekter")
+
+for idx, row in map_gdf.iterrows():
+    included = row["Inkluder"]
+    folium.CircleMarker(
+        [row.geometry.y, row.geometry.x],
+        radius=8 if included else 6,
+        color="white",
+        weight=1,
+        fill=True,
+        fill_color="#28a745" if included else "#6c757d",
+        fill_opacity=0.9 if included else 0.5,
+        tooltip=row["Beskrivelse"],
+    ).add_to(fg)
+
+# 6. Render Map
+map_output = st_folium(
+    m,
+    # REMOVED: center=... and zoom=... 
+    # We rely on m.fit_bounds() to control the view. 
+    # Passing fixed center/zoom here would override fit_bounds or prevent panning.
+    feature_group_to_add=fg,
+    returned_objects=["last_object_clicked"], 
+    height=600,
+    width="stretch",
+    key="selector_map",
+)
+
+# 7. Handle Click (Toggle Selection)
+if map_output.get("last_object_clicked"):
+    lat = map_output["last_object_clicked"]["lat"]
+    lng = map_output["last_object_clicked"]["lng"]
+    click_id = f"{lat:.6f}_{lng:.6f}"
+
+    if click_id != st.session_state["last_processed_click"]:
+        
+        # --- CHANGE: REMOVED CENTERING LOGIC ---
+        # We no longer update st.session_state["map_center"] here.
+        # This keeps the map focused on the anlegg/bounds on reload.
+        
+        # Find clicked object
+        tol = 1e-4
+        hit = map_gdf[
+            (abs(map_gdf.geometry.y - lat) < tol) & 
+            (abs(map_gdf.geometry.x - lng) < tol)
+        ]
+
+        if not hit.empty:
+            idx = hit.index[0]
+            # Toggle Boolean
+            current_val = df_current.loc[idx, "Inkluder"]
+            df_current.loc[idx, "Inkluder"] = not current_val
             
-            # UX Improvement: Center map on the clicked object
-            # This prevents the map from snapping back to the starting position
-            st.session_state["map_center"] = [lat, lng]
-            
-            # Find clicked object
-            tol = 1e-4
-            hit = map_gdf[
-                (abs(map_gdf.geometry.y - lat) < tol) & 
-                (abs(map_gdf.geometry.x - lng) < tol)
-            ]
-
-            if not hit.empty:
-                idx = hit.index[0]
-                # Toggle Boolean
-                current_val = df_current.loc[idx, "Inkluder"]
-                df_current.loc[idx, "Inkluder"] = not current_val
-                
-                # Mark processed and Rerun
-                st.session_state["last_processed_click"] = click_id
-                st.rerun()
+            # Mark processed and Rerun
+            st.session_state["last_processed_click"] = click_id
+            st.rerun()
 
 # --- TABLE SECTION ---
-with col_table:
-    st.subheader("Tabell")
 
-    display_df = df_current.sort_values(
-        ["Inkluder", "avstand_meter"], ascending=[False, True]
-    )
+st.subheader("Tabell")
 
-    # Clean Columns
-    cols = ["Inkluder", "Status", "Beskrivelse", "kategori", "avstand_meter", "trykk_kPa"]
-    cols = [c for c in cols if c in display_df.columns]
+display_df = df_current.sort_values(
+    ["Inkluder", "avstand_meter"], ascending=[False, True]
+)
 
-    edited = st.data_editor(
-        display_df[cols],
-        column_config={
-            "Inkluder": st.column_config.CheckboxColumn("Inkluder"),
-            "avstand_meter": st.column_config.NumberColumn("Avstand (m)", format="%.1f"),
-            "trykk_kPa": st.column_config.NumberColumn("Trykk (kPa)", format="%.2f"),
-        },
-        hide_index=True,
-        height=600,
-        key="table_editor"
-    )
+# Clean Columns
+cols = ["Inkluder", "Status", "Beskrivelse", "kategori", "avstand_meter", "trykk_kPa"]
+cols = [c for c in cols if c in display_df.columns]
 
-    # 6. SYNC TABLE -> MAP
-    # If table changed, update Master DF and Rerun Map
-    if not edited["Inkluder"].equals(df_current.loc[edited.index, "Inkluder"]):
-        df_current.update(edited["Inkluder"])
-        st.rerun()
+edited = st.data_editor(
+    display_df[cols],
+    column_config={
+        "Inkluder": st.column_config.CheckboxColumn("Inkluder"),
+        "avstand_meter": st.column_config.NumberColumn("Avstand (m)", format="%.1f"),
+        "trykk_kPa": st.column_config.NumberColumn("Trykk (kPa)", format="%.2f"),
+    },
+    hide_index=True,
+    height=600,
+    key="table_editor"
+)
+
+# 6. SYNC TABLE -> MAP
+# If table changed, update Master DF and Rerun Map
+if not edited["Inkluder"].equals(df_current.loc[edited.index, "Inkluder"]):
+    df_current.update(edited["Inkluder"])
+    st.rerun()
 
 # ------------------------------------------------------------
 # 9. SAVE SELECTION

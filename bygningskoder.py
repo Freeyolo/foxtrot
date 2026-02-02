@@ -140,5 +140,5 @@ MATRIKKEL_BYGNINGSTYPE = {
     "840": ("Offentlig toalett",  "vei/industri"),
     "956": ("Turisthytter",  "bolig"),
     "970": ("Sykehus med   akuttmottak",  "sårbar"),
-    "999": ("Ukjent bygningstype",  "sårbar"),
+    "999": ("Ukjent bygningstype",  "skjermingsverdig"),
 }
