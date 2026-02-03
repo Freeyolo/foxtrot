@@ -90,7 +90,7 @@ def analyze_row(row):
     
     # Skjermingsverdig logic
     if cat == "skjermingsverdig":
-        return ("⚠️ Skjermingsverdig", True) if dist < QD_syk else ("✅ Trygg", False)
+        return ("🚫 Skjermingsverdig", True) if dist < QD_syk else ("✅ Trygg", False)
     
     # Standard logic
     limit = QD_syk if cat == "sårbar" else (QD_bolig if cat == "bolig" else QD_vei)

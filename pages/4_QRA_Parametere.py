@@ -38,7 +38,8 @@ st.set_page_config(
 # 2. STATE CHECKS & DATA LOADING (ANLEGG AND SELECTION)
 # ------------------------------------------------------------
 if "gdf_anlegg" not in st.session_state or st.session_state["gdf_anlegg"].empty:
-    st.warning("Ingen anleggsdata funnet. Gå tilbake til kart-analysen.")
+    st.warning("Ingen anleggsdata funnet. Gå tilbake til input siden.")
+    st.page_link("pages/1_Input.py", label="Gå til input side", icon=":material/home:", width="stretch")
     st.stop()
 
 if "qra_selected_gdf" not in st.session_state or st.session_state["qra_selected_gdf"].empty:
@@ -145,6 +146,7 @@ if "qra_params_df" not in st.session_state:
     
     # 3. Set default Bygningstype (BN)
     df_source["Bygningstype"] = "BN"
+    df_source["Geometritype"] = "PF"
     
     # 4. Set default Tilstedeværelse based on category
     def get_presence_default(cat):
@@ -157,18 +159,13 @@ if "qra_params_df" not in st.session_state:
     
     # 5. Store only the columns we need for this view in session state
     # We keep 'kategori' hidden for logic if needed, but display the rest
-    cols_to_keep = ["beskrivelse", "avstand_meter", "trykk_kPa", "Bygningstype", "Tilstedeværelse", "kategori"]
+    cols_to_keep = ["beskrivelse", "avstand_meter", "trykk_kPa", "Bygningstype","Geometritype", "Tilstedeværelse", "kategori"]
     st.session_state["qra_params_df"] = df_source[cols_to_keep]
 
 # ------------------------------------------------------------
 # 6.2 DATA EDITOR (PARAMS)
 # ------------------------------------------------------------
-st.markdown("""
-Her defineres bygningstype og oppholdstid for de valgte objektene.
-* **BN:** Normal bygning
-* **BL:** Lett bygning
-* **BS:** Forsterket bygning
-""")
+st.markdown("Her defineres bygningstype og oppholdstid for de valgte objektene.")
 
 # We use the session state DF as the "master"
 df_params = st.session_state["qra_params_df"]
@@ -197,6 +194,13 @@ edited_params = st.data_editor(
             options=["BN", "BL", "BS"],
             required=True
         ),
+        "Geometritype": st.column_config.SelectboxColumn(
+            "Geometritype",
+            help="PF: punkt, AL: Areal, LR: Lineær",
+            width="medium",
+            options=["PF", "AL", "LR"],
+            required=True
+        ),
         "Tilstedeværelse": st.column_config.NumberColumn(
             "Tilstedeværelse (0-1)",
             help="Sannsynlighet for at personer er tilstede (0.0 - 1.0)",
@@ -208,7 +212,7 @@ edited_params = st.data_editor(
         "kategori": None 
     },
     use_container_width=True,
-    hide_index=False, # Shows the re-indexed 0, 1, 2...
+    hide_index=False,
     key="params_editor"
 )
 
@@ -218,3 +222,16 @@ edited_params = st.data_editor(
 if not edited_params.equals(st.session_state["qra_params_df"]):
     st.session_state["qra_params_df"] = edited_params
     
+# ------------------------------------------------------------
+# SITUATIONS
+# ------------------------------------------------------------
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("Situasjoner")
+    d = {"Situation":["Dag","Kveld","Natt","Helg"], "Varighet":[0.1,0.2,0.3,0.4]}
+    df_sit = pd.DataFrame(data=d)
+    st.data_editor(df_sit)
+with col2:
+    st.header("testing")

@@ -145,7 +145,7 @@ if not df_skjerming_inside.empty:
         "Disse bør vurderes særskilt."
     )
 
-if total_violation_count == 0:
+if total_violation_count == 0 and df_skjerming_inside.empty:
     st.success("Ingen bygninger innenfor sin respektive sikkerhetsavstand! :shield:")
 else:
     st.error(f"Totalt **{total_violation_count}** objekter innenfor sikkerhetsavstandene.")
@@ -170,8 +170,10 @@ def get_status(row):
         return "⚠️ Innenfor QD (bolig)"
     elif cat == "vei/industri" and dist < QD_vei:
         return "⚠️ Innenfor QD (vei/ind.)"
+    elif cat == "skjermingsverdig":
+        return "🚫 skjermingsverdig"
     elif cat == "ingen beskyttelse":
-        return None
+        return "ingen beskyttelse"
     else:
         return "✅ Trygg"
 
