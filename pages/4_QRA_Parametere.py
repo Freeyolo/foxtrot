@@ -35,24 +35,24 @@ st.set_page_config(
 )
 
 # ------------------------------------------------------------
-# 2. STATE CHECKS & DATA LOADING
+# 2. STATE CHECKS & DATA LOADING (ANLEGG AND SELECTION)
 # ------------------------------------------------------------
-if "gdf_anlegg" not in st.session_state or not st.session_state["gdf_anlegg"]:
+if "gdf_anlegg" not in st.session_state or st.session_state["gdf_anlegg"].empty:
     st.warning("Ingen anleggsdata funnet. Gå tilbake til kart-analysen.")
-    # Stop execution if data is missing
     st.stop()
 
+if "qra_selected_gdf" not in st.session_state or st.session_state["qra_selected_gdf"].empty:
+    st.warning("Ingen objekter valgt for kvantitativ risikoanalyse (QRA)")
+    st.page_link("pages/3_QRA_Seleksjon.py", label="Gå til QRA Seleksjon", icon=":material/home:", width="stretch")
+    st.stop()
+    
 # ------------------------------------------------------------
-# 3. INITIALIZE EDITABLE DATAFRAME
+# 3. INITIALIZE EDITABLE DATAFRAME (LAGER)
 # ------------------------------------------------------------
-# We only create 'df_lager' once. If it exists in session_state, 
-# we skip this block to preserve user edits.
 if "df_lager" not in st.session_state:
     
     gdf_source = st.session_state["gdf_anlegg"]
     
-    # We iterate through the source GDF to create the initial lager DataFrame.
-    # This handles cases where gdf_anlegg might have 1 row or multiple rows.
     lager_list = []
     
     for idx, row in gdf_source.iterrows():
@@ -61,28 +61,25 @@ if "df_lager" not in st.session_state:
         lager_list.append({
             "Navn": "Hovedlager", 
             "Type": "Stålcontainer",
-            "Prob. det": 0.0, # Will calculate immediately below
+            "Prob. det": 0.0, 
             "NEI (kg)": nei_val,
             "Bruttovekt": 1.1 * nei_val,
             "Bygningsmasse (tonn)": 6.0
         })
     
     df_init = pd.DataFrame(lager_list)
-    
-    # Calculate the initial probability based on the default 'Stålcontainer'
     df_init["Prob. det"] = df_init.apply(calculate_detonation_prob, axis=1)
     
-    # Save to session state
     st.session_state["df_lager"] = df_init
 
 # ------------------------------------------------------------
-# 4. DATA EDITOR
+# 4. DATA EDITOR (LAGER)
 # ------------------------------------------------------------
 st.subheader("Rediger Lagerdata")
 
 st.page_link("pages/1_Input.py", label="Gå til forside for å endre netto eksplosivinnhold", icon=":material/home:", width="stretch")
 st.info("Sannsynlighet er automatisk utregnet basert på lagertype og NEI, kan også settes manuelt")
-# Using st.data_editor to allow interaction
+
 edited_df = st.data_editor(
     st.session_state["df_lager"],
     num_rows="fixed",
@@ -97,8 +94,8 @@ edited_df = st.data_editor(
         "Prob. det": st.column_config.NumberColumn(
             "Sannsynlighet",
             help="Kalkuleres automatisk basert på Type og NEI",
-            format="%.3e", # Scientific notation
-            disabled=False   # Read-only for the user
+            format="%.3e", 
+            disabled=False   
         ),
         "Bygningsmasse (tonn)": st.column_config.NumberColumn(
             "Bygningsmasse (tonn)",
@@ -109,7 +106,7 @@ edited_df = st.data_editor(
         "NEI (kg)": st.column_config.NumberColumn(
             "NEI (kg)",
             format="%.0f",
-            disabled=True # Usually fixed from input, change to False if you want it editable
+            disabled=True 
         ),
         "Bruttovekt": st.column_config.NumberColumn(
             format="%.1f"
@@ -119,31 +116,105 @@ edited_df = st.data_editor(
 )
 
 # ------------------------------------------------------------
-# 5. REACTIVE UPDATE LOGIC
+# 5. REACTIVE UPDATE LOGIC (LAGER)
 # ------------------------------------------------------------
-
-# 1. Recalculate probabilities based on the CURRENT state of the editor (edited_df)
-#    This catches if the user changed the "Type" dropdown.
 recalculated_probs = edited_df.apply(calculate_detonation_prob, axis=1)
 
-# 2. Check for changes in Probability (Triggered by Type change)
-#    We compare the calculated values with what is currently inside the dataframe.
 if not recalculated_probs.equals(edited_df["Prob. det"]):
-    # Apply new calculation
     edited_df["Prob. det"] = recalculated_probs
-    
-    # Update Session State
     st.session_state["df_lager"] = edited_df
-    
-    # Rerun to force the editor to display the new Number
     st.rerun()
 
-# 3. Check for other manual changes (e.g., Bygningsmasse)
-#    If the user typed a number, we must save it to session state so it sticks.
 elif not edited_df.equals(st.session_state["df_lager"]):
     st.session_state["df_lager"] = edited_df
 
+# ------------------------------------------------------------
+# 6. EXPOSED OBJECTS SECTION
+# ------------------------------------------------------------
 st.divider()
 st.subheader("Definer parametere for utsatte objekter")
-st.session_state
-st.write("testing")
+
+
+if "qra_params_df" not in st.session_state:
+    
+    # 1. Get copy of selected data
+    df_source = st.session_state["qra_selected_gdf"].copy()
+    
+    # 2. Reset index to get a clean 0, 1, 2... index for the table
+    df_source = df_source.reset_index(drop=True)
+    
+    # 3. Set default Bygningstype (BN)
+    df_source["Bygningstype"] = "BN"
+    
+    # 4. Set default Tilstedeværelse based on category
+    def get_presence_default(cat):
+        cat_lower = str(cat).lower()
+        if "bolig" in cat_lower or "sårbar" in cat_lower:
+            return 1.0
+        return 0.0
+
+    df_source["Tilstedeværelse"] = df_source["kategori"].apply(get_presence_default)
+    
+    # 5. Store only the columns we need for this view in session state
+    # We keep 'kategori' hidden for logic if needed, but display the rest
+    cols_to_keep = ["beskrivelse", "avstand_meter", "trykk_kPa", "Bygningstype", "Tilstedeværelse", "kategori"]
+    st.session_state["qra_params_df"] = df_source[cols_to_keep]
+
+# ------------------------------------------------------------
+# 6.2 DATA EDITOR (PARAMS)
+# ------------------------------------------------------------
+st.markdown("""
+Her defineres bygningstype og oppholdstid for de valgte objektene.
+* **BN:** Normal bygning
+* **BL:** Lett bygning
+* **BS:** Forsterket bygning
+""")
+
+# We use the session state DF as the "master"
+df_params = st.session_state["qra_params_df"]
+
+edited_params = st.data_editor(
+    df_params,
+    column_config={
+        "beskrivelse": st.column_config.TextColumn(
+            "Beskrivelse",
+            disabled=True 
+        ),
+        "avstand_meter": st.column_config.NumberColumn(
+            "Avstand (m)",
+            format="%.1f",
+            disabled=True
+        ),
+        "trykk_kPa": st.column_config.NumberColumn(
+            "Trykk (kPa)",
+            format="%.2f",
+            disabled=True
+        ),
+        "Bygningstype": st.column_config.SelectboxColumn(
+            "Bygningstype",
+            help="BN: Normal, BL: Lett, BS: Forsterket",
+            width="medium",
+            options=["BN", "BL", "BS"],
+            required=True
+        ),
+        "Tilstedeværelse": st.column_config.NumberColumn(
+            "Tilstedeværelse (0-1)",
+            help="Sannsynlighet for at personer er tilstede (0.0 - 1.0)",
+            min_value=0.0,
+            max_value=1.0,
+            format="%.3f"
+        ),
+        # Hide internal columns
+        "kategori": None 
+    },
+    use_container_width=True,
+    hide_index=False, # Shows the re-indexed 0, 1, 2...
+    key="params_editor"
+)
+
+# ------------------------------------------------------------
+# 6.3 SYNC CHANGES TO STATE
+# ------------------------------------------------------------
+if not edited_params.equals(st.session_state["qra_params_df"]):
+    st.session_state["qra_params_df"] = edited_params
+    
