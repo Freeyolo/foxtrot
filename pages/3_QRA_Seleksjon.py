@@ -126,8 +126,7 @@ map_gdf["Inkluder"] = df_current["Inkluder"]
 # ------------------------------------------------------------
 # 7. MAP VIEW STATE
 # ------------------------------------------------------------
-# We only calculate the center of the ANLEGG once. 
-# We do NOT update this based on clicks anymore.
+
 if "map_center" not in st.session_state:
     anlegg = st.session_state["gdf_anlegg"].geometry.iloc[0]
     transformer = Transformer.from_crs("EPSG:32633", "EPSG:4326", always_xy=True)
@@ -150,7 +149,6 @@ st.title("Seleksjon av objekter til QRA")
 st.write("Klikk på objekter i kartet eller tabellen for å inkludere / ekskludere objektene i kvantitativ risikoanalyse.")
 st.info(
     "**Standardvalg:** Kun objekter som ligger **innenfor** sikkerhetsavstandene er valgt automatisk. "
-    "Objekter som er 'Trygge' eller har 'Ingen beskyttelse' er synlige i tabellen, men ikke valgt."
 )
 col_map, col_table = st.columns(2)
 
@@ -161,7 +159,7 @@ st.subheader("Kart")
 # 1. Base Map (Centered on Anlegg)
 m = folium.Map(
     location=st.session_state["map_center"], 
-    zoom_start=14, # Fallback zoom
+    zoom_start=14,
     tiles="OpenStreetMap"
 )
 
@@ -179,7 +177,7 @@ try:
     # Apply fit_bounds to the map
     m.fit_bounds([[sw_lat, sw_lon], [ne_lat, ne_lon]])
 except Exception as e:
-    # Fallback if calculation fails (e.g. empty geometry)
+
     pass
 
 # 3. Add Anlegg Marker
@@ -212,15 +210,12 @@ for idx, row in map_gdf.iterrows():
         fill=True,
         fill_color="#28a745" if included else "#6c757d",
         fill_opacity=0.9 if included else 0.5,
-        tooltip=row["Beskrivelse"],
+        tooltip=str(row["beskrivelse"]),
     ).add_to(fg)
 
 # 6. Render Map
 map_output = st_folium(
     m,
-    # REMOVED: center=... and zoom=... 
-    # We rely on m.fit_bounds() to control the view. 
-    # Passing fixed center/zoom here would override fit_bounds or prevent panning.
     feature_group_to_add=fg,
     returned_objects=["last_object_clicked"], 
     height=600,
@@ -235,11 +230,6 @@ if map_output.get("last_object_clicked"):
     click_id = f"{lat:.6f}_{lng:.6f}"
 
     if click_id != st.session_state["last_processed_click"]:
-        
-        # --- CHANGE: REMOVED CENTERING LOGIC ---
-        # We no longer update st.session_state["map_center"] here.
-        # This keeps the map focused on the anlegg/bounds on reload.
-        
         # Find clicked object
         tol = 1e-4
         hit = map_gdf[
@@ -260,32 +250,51 @@ if map_output.get("last_object_clicked"):
 # --- TABLE SECTION ---
 
 st.subheader("Tabell")
-
+st.info("Velg objekter som skal inkluderes i QRA. Objektenes beskrivelse kan redigeres")
 display_df = df_current.sort_values(
     ["Inkluder", "avstand_meter"], ascending=[False, True]
 )
 
-# Clean Columns
-cols = ["Inkluder", "Status", "Beskrivelse", "kategori", "avstand_meter", "trykk_kPa"]
+# Define columns to show
+cols = ["Inkluder", "Status", "beskrivelse", "kategori", "avstand_meter", "trykk_kPa"]
 cols = [c for c in cols if c in display_df.columns]
 
 edited = st.data_editor(
     display_df[cols],
     column_config={
-        "Inkluder": st.column_config.CheckboxColumn("Inkluder"),
-        "avstand_meter": st.column_config.NumberColumn("Avstand (m)", format="%.1f"),
-        "trykk_kPa": st.column_config.NumberColumn("Trykk (kPa)", format="%.2f"),
+        "Inkluder": st.column_config.CheckboxColumn("Inkluder", width=40),
+        "beskrivelse": st.column_config.TextColumn("Beskrivelse"),
+        "Status": st.column_config.TextColumn("Status", disabled=True, width=75),
+        "kategori": st.column_config.TextColumn("Kategori", disabled=True),
+        "avstand_meter": st.column_config.NumberColumn("Avstand (m)", format="%.1f", disabled=True, width=40),
+        "trykk_kPa": st.column_config.NumberColumn("Trykk (kPa)", format="%.2f", disabled=True, width=40),
     },
     hide_index=True,
     height=600,
     key="table_editor"
 )
 
-# 6. SYNC TABLE -> MAP
-# If table changed, update Master DF and Rerun Map
-if not edited["Inkluder"].equals(df_current.loc[edited.index, "Inkluder"]):
-    df_current.update(edited["Inkluder"])
+# 6. SYNC TABLE -> MAP (Fixed Logic)
+# We check if *either* Inkluder or Beskrivelse has changed.
+editable_cols = ["Inkluder", "beskrivelse"]
+
+# Align the original data to the sorted edited data using the index
+current_subset = df_current.loc[edited.index, editable_cols]
+edited_subset = edited[editable_cols]
+
+# If there is a discrepancy (user edited text or checkbox)
+if not current_subset.equals(edited_subset):
+    # Update the Master DataFrame in Session State
+    # Note: .update() matches on index, so the sorting of 'edited' doesn't break data alignment
+    df_current.update(edited_subset)
+    
+    # Also update the Map DataFrame so tooltips/colors update correctly
+    if "processed_map_gdf" in st.session_state:
+        st.session_state["processed_map_gdf"].update(edited_subset)
+    
+    # Rerun to refresh the map and save state
     st.rerun()
+
 
 # ------------------------------------------------------------
 # 9. SAVE SELECTION
@@ -298,7 +307,6 @@ with st.popover("Bekreft utvalg", type="primary", width="stretch"):
     final = df_current[df_current["Inkluder"]].copy()
     
     # Ensure Status column is preserved in the final output
-    # (Since 'Status' might not be in gdf_calculated, but is in qra_editor_data)
     if "Status" in df_current.columns:
         final["Status"] = df_current.loc[final.index, "Status"]
         

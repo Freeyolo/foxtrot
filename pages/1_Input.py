@@ -61,7 +61,7 @@ def classify_buildings(gdf):
     ref_df = pd.DataFrame.from_dict(
         MATRIKKEL_BYGNINGSTYPE, 
         orient='index', 
-        columns=['Beskrivelse', 'Kategori']
+        columns=['beskrivelse', 'kategori']
     )
 
     # 3. Merge the lookup data into the results
@@ -75,8 +75,8 @@ def classify_buildings(gdf):
     # 4. Define Logic to assign Category (with fallback)
     def assign_category(row):
         # If found in dictionary, use that
-        if pd.notna(row["Kategori"]):
-            return row["Kategori"]
+        if pd.notna(row["kategori"]):
+            return row["kategori"]
         
         # Fallback if code is new/unknown: Guess type based on first digit
         code = str(row["bygningstype"])
@@ -238,7 +238,7 @@ if st.session_state["GISanalysis_complete"]:
     # --- DISPLAY SAVED VALUES ---
     inputs = st.session_state["last_calc_inputs"]
     if inputs:
-        st.info(f"**Valgte verdier:** Nord: {inputs['nord']}, Øst: {inputs['oest']}, Totalvekt: {inputs['nei']} kg")
+        st.info(f"**Valgte verdier:** Nord: {inputs['nord']}, Øst: {inputs['oest']}, Totalvekt: {inputs['nei']} kg NEI")
         
     with st.spinner("Tegner kart...", show_time=True):
         # --- RE-GENERATE MAP FROM SAVED DATA ---

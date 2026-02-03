@@ -156,7 +156,7 @@ st.divider()
 st.subheader("Tabell over alle bygninger")
 
 # Prepare display DataFrame
-display_df = exp_buildings_gdf[["Beskrivelse", "kategori", "avstand_meter", "trykk_kPa"]].copy()
+display_df = exp_buildings_gdf[["beskrivelse", "kategori", "avstand_meter", "trykk_kPa"]].copy()
 
 # Add Status Column
 def get_status(row):
