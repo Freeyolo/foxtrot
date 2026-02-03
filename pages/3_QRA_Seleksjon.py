@@ -27,7 +27,7 @@ if not st.session_state.get("GISanalysis_complete", False):
 # 3. INPUT STALENESS CHECK
 # ------------------------------------------------------------
 current_inputs = st.session_state.get("last_calc_inputs", {})
-snapshot_inputs = st.session_state.get("qra_inputs_snapshot", {})
+snapshot_inputs = st.session_state.get("qra_input", {})
 
 if current_inputs != snapshot_inputs:
     # Inputs changed (e.g. NEI or location), so previous selection/map is invalid
@@ -43,7 +43,7 @@ if current_inputs != snapshot_inputs:
         if k in st.session_state:
             del st.session_state[k]
 
-    st.session_state["qra_inputs_snapshot"] = current_inputs
+    st.session_state["qra_input"] = current_inputs
 
 # ------------------------------------------------------------
 # 4. DATA RETRIEVAL (OPTIMIZED)
